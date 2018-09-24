@@ -1,0 +1,642 @@
+#############################################################
+-- Criação do container salt: 
+docker run -d --cpus=1 -m=1g -it --cap-add=SYS_ADMIN --cap-add=NET_ADMIN -v /sys/fs/cgroup:/sys/fs/cgroup:ro --network=macvlan --ip=172.16.0.15 --restart unless-stopped -v /home/salt:/srv -h salt  --name=salt  centos /usr/sbin/init
+
+-- Instalação de acordo com a página: https://docs.saltstack.com/en/latest/topics/installation/index.html
+-- Para CentOS 7: https://docs.saltstack.com/en/latest/topics/installation/rhel.html
+
+#############################################################
+-- Salt-Minion instalado no servidor "huginemunin" (utilizado para containerização - Fedora Server 28): 
+dnf install salt-minion 
+pip uninstall docker-py 
+pip install docker
+
+-- Arquivo de configuração: 
+** Os comentários foram suprimidos.
+[root@huginemunin ~]# cat /etc/salt/minion | grep -v \#
+sock_dir: /var/run/salt/minion
+acceptance_wait_time: 60
+recon_default: 10000
+user: root
+master: 172.16.0.15
+loop_interval: 60
+
+
+log_level: debug
+id: huginemunin.dockerserver
+
+#############################################################
+-- Comandos salt para criação da rede: 
+** A rede MACVLAN foi utilizada para facilitação, uma vez que é possível determinar um IP da rede de dev/prod no container, facilitando os testes sem a necessidade de adição de rotas no firewall ou computador.  
+salt huginemunin.dockerserver docker.create_network macvlan driver=macvlan subnet=172.16.0.0/24 gateway=172.16.0.254 driver_opts="{'parent': 'enp1s0'}" attachable=True
+huginemunin.dockerserver:                               
+    ----------                                                            
+    Id:                                                                                                                                                                                          
+        7fda857bcc1d44c0c631a7a61034b9b4418f31216264e88eade00704838b5673
+    Warning:  
+
+-- States e comandos utilizados: 
+
+#############################################################
+                  NGINX
+#############################################################
+# nginx-docker.sls (/srv/salt/nginx-docker.sls)
+
+nginx:
+  docker_container.run:
+    - name: nginx
+    - image: centos:latest
+    - cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    - entrypoint: "/usr/sbin/init"
+    - detach: True
+    - domainname: passeidireto
+    - environment:
+      - TZ: America/Sao_Paulo
+    - hostname: nginx.passeidireto
+    - interactive: True
+    - log_driver: syslog
+    - mem_limit: 1G
+    - restart: unless-stopped
+    - networks:
+      - macvlan:
+        - ipv4_address: 172.16.0.20
+    - sysctls:
+      - net.ipv4.conf.all.accept_redirects=0
+      - net.ipv4.conf.all.accept_source_route=0
+      - net.ipv4.conf.all.log_martians=1
+      - net.ipv4.conf.all.rp_filter=1
+      - net.ipv4.conf.all.secure_redirects=0
+      - net.ipv4.conf.all.send_redirects=0
+      - net.ipv4.conf.default.accept_redirects=0
+      - net.ipv4.conf.default.accept_source_route=0
+      - net.ipv4.conf.default.accept_source_route=0
+      - net.ipv4.conf.default.log_martians=1
+      - net.ipv4.conf.default.rp_filter=1
+      - net.ipv4.conf.default.rp_filter=1
+      - net.ipv4.conf.default.secure_redirects=0
+      - net.ipv4.conf.default.send_redirects=0
+      - net.ipv4.icmp_echo_ignore_broadcasts=1
+      - net.ipv4.icmp_ignore_bogus_error_responses=1
+      - net.ipv4.ip_forward=1
+      - net.ipv4.ip_local_port_range=2000 65000
+      - net.ipv4.tcp_fin_timeout=5
+      - net.ipv4.tcp_rmem=4096 87380 8388608
+      - net.ipv4.tcp_syncookies=0
+      - net.ipv4.tcp_timestamps=0
+    - binds:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+#############################################################
+
+[root@salt salt]# salt huginemunin.dockerserver state.apply nginx-docker
+[root@salt salt]# salt huginemunin.dockerserver docker.run nginx 'yum update -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run nginx 'yum install epel-release -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run nginx 'yum install python2-pip.noarch -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run nginx 'pip install --upgrade pip' 
+[root@salt salt]# salt huginemunin.dockerserver docker.run nginx 'pip install futures'
+[root@salt salt]# salt huginemunin.dockerserver dockerng.sls nginx saltenv='nginx' mods=nginx    
+[root@salt salt]# salt huginemunin.dockerserver dockerng.sls nginx mods=nginx
+
+#############################################################
+# nginx.sls (saltenv=nginx - /srv/nginx/ngins_repo.sls) 
+
+include:
+  - nginx_repo
+
+nginx:
+  pkg.installed:
+    - name: nginx
+
+  service.running:
+    - name: nginx
+    - enable: True
+
+  file.recurse:
+    - name: /etc/nginx
+    - source: salt://arquivos/nginx
+    - user: root
+    - group: root
+
+  cmd.run:
+    - names:
+      - mkdir -p /var/lib/nginx/cache
+      - chown nginx.nginx /var/lib/nginx
+#############################################################
+# nginx_repo.sls (saltenv=nginx - /srv/nginx/ngins_repo.sls) ** dependência do nginx.sls (saltenv=nginx)
+
+nginx_repo:
+  file.managed:
+    - name: /etc/yum.repos.d/nginx.repo
+    - source: salt://arquivos/nginx.repo
+
+#############################################################
+# Arquivo /srv/nginx/arquivos/nginx.repo
+
+[nginx]
+name=nginx repo
+baseurl=http://nginx.org/packages/centos/$releasever/$basearch/
+gpgcheck=0
+enabled=1
+
+#############################################################
+# nginx.sls (saltenv default - /srv/salt/nginx.sls) 
+
+/etc/nginx/conf.d/default.conf:
+  file.managed:
+    - source:
+      - salt://arquivos/default.conf
+
+nginx-actions:
+  cmd.run:
+    - names:
+      - nginx -t && nginx -s reload
+
+#############################################################
+# Arquivo /srv/salt/arquivos/default.conf
+
+server {
+    listen       80 default_server;
+    server_name  _;
+
+    location / {
+      proxy_pass http://172.16.0.23:8080;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection 'upgrade';
+      proxy_set_header Host $host;
+   }
+}
+#############################################################
+
+
+#############################################################
+#############################################################
+#############################################################
+             MYSQL
+#############################################################
+# mysql-docker.sls (/srv/salt/mysql-docker.sls)
+
+mysql:
+  docker_container.run:
+    - name: mysql
+    - image: centos:latest
+    - cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    - entrypoint: "/usr/sbin/init"
+    - detach: True
+    - domainname: passeidireto
+    - environment:
+      - TZ: America/Sao_Paulo
+    - hostname: mysql.passeidireto
+    - interactive: True
+    - log_driver: syslog
+    - mem_limit: 1G
+    - restart: unless-stopped
+    - networks:
+      - macvlan:
+        - ipv4_address: 172.16.0.21
+    - sysctls:
+      - net.ipv4.conf.all.accept_redirects=0
+      - net.ipv4.conf.all.accept_source_route=0
+      - net.ipv4.conf.all.log_martians=1
+      - net.ipv4.conf.all.rp_filter=1
+      - net.ipv4.conf.all.secure_redirects=0
+      - net.ipv4.conf.all.send_redirects=0
+      - net.ipv4.conf.default.accept_redirects=0
+      - net.ipv4.conf.default.accept_source_route=0
+      - net.ipv4.conf.default.accept_source_route=0
+      - net.ipv4.conf.default.log_martians=1
+      - net.ipv4.conf.default.rp_filter=1
+      - net.ipv4.conf.default.rp_filter=1
+      - net.ipv4.conf.default.secure_redirects=0
+      - net.ipv4.conf.default.send_redirects=0
+      - net.ipv4.icmp_echo_ignore_broadcasts=1
+      - net.ipv4.icmp_ignore_bogus_error_responses=1
+      - net.ipv4.ip_forward=1
+      - net.ipv4.ip_local_port_range=2000 65000
+      - net.ipv4.tcp_fin_timeout=5
+      - net.ipv4.tcp_rmem=4096 87380 8388608
+      - net.ipv4.tcp_syncookies=0
+      - net.ipv4.tcp_timestamps=0
+    - binds:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+#############################################################
+[root@salt salt]# salt huginemunin.dockerserver state.apply mysql-docker
+[root@salt salt]# salt huginemunin.dockerserver docker.run mysql 'yum update -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run mysql 'yum install epel-release -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run mysql 'yum install python2-pip.noarch -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run mysql 'pip install --upgrade pip' 
+[root@salt salt]# salt huginemunin.dockerserver docker.run mysql 'pip install futures'
+[root@salt salt]# salt huginemunin.dockerserver dockerng.sls mysql saltenv='mysql' mods=mysql 
+[root@salt salt]# salt huginemunin.dockerserver docker.run mysql 'bash /root/configure_mysql.sh'
+[root@huginemunin ~]# docker exec -it mysql bash
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "create database notes;"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "show databases;"
+Warning: Using a password on the command line interface can be insecure.
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| notes              |
+| performance_schema |
++--------------------+
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "create user 'notes-api'@'%' identified by 'yWRsbyr7MTMjdUhG';"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "grant all privileges on notes.* to 'notes-api'@'%'"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "flush privileges"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "show grants for 'notes-api'@'%'"
+Warning: Using a password on the command line interface can be insecure.
++----------------------------------------------------------------------------------------------------------+
+| Grants for notes-api@%                                                                                   |
++----------------------------------------------------------------------------------------------------------+
+| GRANT USAGE ON *.* TO 'notes-api'@'%' IDENTIFIED BY PASSWORD '*9761C8A40E3FF5D053CFE78872F884878D43DEED' |
+| GRANT ALL PRIVILEGES ON `notes`.* TO 'notes-api'@'%'                                                     |
++----------------------------------------------------------------------------------------------------------+
+[root@mysql /]# 
+
+#############################################################
+# mysql.sls (saltenv=mysql - /srv/mysql/mysql.sls)
+
+include:
+  - mysql_repo
+
+mysql:
+  pkg.installed:
+    - pkgs:
+  {% if grains['os_family'] == 'RedHat' %}
+      - Percona-Server-server-56
+  {% elif grains['os_family'] == 'Debian' %}
+      - percona-server-server-5.6
+  {% endif %}
+      - expect
+
+  service.running:
+  {% if grains['os_family'] == 'RedHat' %}
+    - name: mysql
+  {% elif grains['os_family'] == 'Debian' %}
+    - name: mysql
+  {% endif %}
+    - enable: True
+
+  file.managed:
+    - names:
+      - /etc/my.cnf:
+        - source: salt://arquivos/my.cnf
+
+      - /root/configure_mysql.sh:
+        - source: salt://arquivos/configure_mysql.sh
+        - mode: 755
+
+  cmd.run:
+    - names:
+      - systemctl stop mysqld
+      - rm -rf /var/lib/mysql ; mysql_install_db
+      - systemctl start mysqld
+      - /etc/init.d/mysql start
+      - chmod 755 /root/configure_mysql.sh
+
+#############################################################
+# Arquivo /srv/mysql/arquivos/my.cnf
+
+[mysql]
+
+# CLIENT #
+port                           = 3306
+socket                         = /var/lib/mysql/mysql.sock
+
+[mysqld]
+
+# GENERAL #
+user                           = mysql
+default-storage-engine         = InnoDB
+socket                         = /var/lib/mysql/mysql.sock
+pid-file                       = /var/lib/mysql/mysql.pid
+
+# MyISAM #
+key-buffer-size                = 32M
+myisam-recover                 = FORCE,BACKUP
+
+# SAFETY #
+max-allowed-packet             = 16M
+max-connect-errors             = 1000000
+skip-name-resolve
+sql-mode                       = STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_AUTO_VALUE_ON_ZERO,NO_ENGINE_SUBSTITUTION
+sysdate-is-now                 = 1
+innodb                         = FORCE
+
+# DATA STORAGE #
+datadir                        = /var/lib/mysql/
+
+# CACHES AND LIMITS #
+tmp-table-size                 = 32M
+max-heap-table-size            = 32M
+max-connections                = 500
+thread-cache-size              = 50
+open-files-limit               = 65535
+table-definition-cache         = 4096
+table-open-cache               = 8M
+
+# INNODB #
+innodb-flush-method            = O_DIRECT
+innodb-log-files-in-group      = 2
+innodb-log-file-size           = 32M
+innodb-flush-log-at-trx-commit = 1
+innodb-file-per-table          = 1
+innodb-buffer-pool-size        = 128M
+
+# LOGGING #
+log-error                      = /var/lib/mysql/mysql-error.log
+log-queries-not-using-indexes  = 1
+slow-query-log                 = 1
+
+# Novas otimizações
+join_buffer_size = 8M
+query_cache_size = 64M
+query_cache_type = 0
+#############################################################
+# mysql_repo.sls (saltenv=mysql - /srv/mysql/mysql_repo.sls)
+
+mysql_repo:
+{% if grains['os_family'] == 'RedHat' %}
+  pkg.installed:
+    - sources: 
+      - percona: https://www.percona.com/redir/downloads/percona-release/redhat/latest/percona-release-0.1-6.noarch.rpm
+
+{% elif grains['os_family'] == 'Debian' %}
+  pkg.installed:
+    - sources: 
+      - percona: https://repo.percona.com/apt/percona-release_0.1-6.$(lsb_release -sc)_all.deb
+{% endif %}
+
+
+  cmd.run:  
+    - names: 
+      - yum update -y
+
+#############################################################
+# Arquivo /root/configure_mysql.sh
+
+#!/bin/bash
+
+tr -cd '[:alnum:]' < /dev/urandom | fold -w30 | head -n1 > /root/.mysqlpasswd
+
+MYSQL_PASS=$(cat /root/.mysqlpasswd)
+
+echo "--> Set root password"
+expect -f - <<-EOF
+  set timeout 10
+  spawn mysql_secure_installation
+  expect "Enter current password for root (enter for none):"
+  send -- "\r"
+  expect "Set root password?"
+  send -- "y\r"
+  expect "New password:"
+  send -- "${MYSQL_PASS}\r"
+  expect "Re-enter new password:"
+  send -- "${MYSQL_PASS}\r"
+  expect "Remove anonymous users?"
+  send -- "y\r"
+  expect "Disallow root login remotely?"
+  send -- "y\r"
+  expect "Remove test database and access to it?"
+  send -- "y\r"
+  expect "Reload privilege tables now?"
+  send -- "y\r"
+  expect eof
+EOF
+#############################################################
+
+
+#############################################################
+#############################################################
+#############################################################
+               NODE.JS
+#############################################################
+# node-docker.sls (/srv/salt/node-docker.sls)
+
+node:
+  docker_container.run:
+    - name: node
+    - image: centos:latest
+    - cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    - entrypoint: "/usr/sbin/init"
+    - detach: True
+    - domainname: passeidireto
+    - environment:
+      - TZ: America/Sao_Paulo
+    - hostname: node.passeidireto
+    - interactive: True
+    - log_driver: syslog
+    - mem_limit: 1G
+    - restart: unless-stopped
+    - networks:
+      - macvlan:
+        - ipv4_address: 172.16.0.23
+    - sysctls:
+      - net.ipv4.conf.all.accept_redirects=0
+      - net.ipv4.conf.all.accept_source_route=0
+      - net.ipv4.conf.all.log_martians=1
+      - net.ipv4.conf.all.rp_filter=1
+      - net.ipv4.conf.all.secure_redirects=0
+      - net.ipv4.conf.all.send_redirects=0
+      - net.ipv4.conf.default.accept_redirects=0
+      - net.ipv4.conf.default.accept_source_route=0
+      - net.ipv4.conf.default.accept_source_route=0
+      - net.ipv4.conf.default.log_martians=1
+      - net.ipv4.conf.default.rp_filter=1
+      - net.ipv4.conf.default.rp_filter=1
+      - net.ipv4.conf.default.secure_redirects=0
+      - net.ipv4.conf.default.send_redirects=0
+      - net.ipv4.icmp_echo_ignore_broadcasts=1
+      - net.ipv4.icmp_ignore_bogus_error_responses=1
+      - net.ipv4.ip_forward=1
+      - net.ipv4.ip_local_port_range=2000 65000
+      - net.ipv4.tcp_fin_timeout=5
+      - net.ipv4.tcp_rmem=4096 87380 8388608
+      - net.ipv4.tcp_syncookies=0
+      - net.ipv4.tcp_timestamps=0
+    - binds:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+
+#############################################################
+[root@salt salt]# salt huginemunin.dockerserver state.apply node-docker
+[root@salt salt]# salt huginemunin.dockerserver docker.run node 'yum update -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run node 'yum install epel-release -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run node 'yum install python2-pip.noarch -y'
+[root@salt salt]# salt huginemunin.dockerserver docker.run node 'pip install --upgrade pip' 
+[root@salt salt]# salt huginemunin.dockerserver docker.run node 'pip install futures'
+[root@salt salt]# salt huginemunin.dockerserver docker.run node 'yum install -y npm'
+[root@salt salt]# salt huginemunin.dockerserver dockerng.sls node mods=nodejs
+
+#############################################################
+# nodejs.sls (/srv/salt/nodejs.sls)
+
+nodejs:
+  pkg.installed:
+    - pkgs:
+      - npm
+      - mysql
+
+  cmd.run:
+    - names:
+      - mkdir -p /virtual/app
+
+  file.recurse:
+    - name: /virtual/app
+    - source: salt://arquivos/PasseiDireto/CodFonte
+    - user: root
+    - group: root
+
+/lib/systemd/system/serverjs.service:
+  file.managed:
+    - source:
+      - salt://arquivos/PasseiDireto/serverjs.service
+
+app:
+  cmd.run:
+    - cwd: /virtual/app
+    - names:
+      - mysql -h 172.16.0.21 -u notes-api -p$(grep password /virtual/app/server.js  | awk -F"'" '{print $2}') notes < /virtual/app/database_schema.sql                                          
+      - npm install --save
+      - systemctl daemon-reload
+      - systemctl enable serverjs
+      - systemctl start serverjs
+
+#############################################################
+# Arquivo /srv/salt/arquivos/PasseiDireto/serverjs.service
+
+[Unit]
+Description=server.js - Passei Direto
+Documentation=https://www.passeidireto.com/
+After=network.target
+
+[Service]
+Environment=NODE_PORT=8080
+Type=simple
+User=root
+ExecStart=/usr/bin/node /virtual/app/server.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
+#############################################################
+#############################################################
+#############################################################
+            TESTES
+#############################################################
+-- Primeira consulta com a tabela vazia:
+[crow@corvus ~]$ curl -i -X "GET" http://172.16.0.20/notes -H "Content-Type: application/json" && echo                                                                                          
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:03:26 GMT
+Content-Length: 2
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:03:36 GMT
+Cache-Control: max-age=10
+
+#############################################################
+- Primeira inserção:
+[crow@corvus ~]$ curl -i -X "POST" http://172.16.0.20/notes -H "Content-Type: application/json"  -d '{"Text":"Teste 1"}' && echo                                                                
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:03:34 GMT
+Content-Length: 2
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:03:44 GMT
+Cache-Control: max-age=10
+
+Ok
+
+#############################################################
+- Primera consulta com dados na tabela: 
+[crow@corvus ~]$ curl -i -X "GET" http://172.16.0.20/notes -H "Content-Type: application/json" && echo                                                                                          
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:03:36 GMT
+Content-Length: 78
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:03:46 GMT
+Cache-Control: max-age=10
+
+[{"Id":1,"Text":"`Text` = 'Teste 1'","CreateDate":"2018-09-24T08:03:34.000Z"}]
+
+#############################################################
+- Inserções adicionais:
+[crow@corvus ~]$ curl -i -X "POST" http://172.16.0.20/notes -H "Content-Type: application/json"  -d '{"Text":"Teste 2"}' && echo                                                                
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:03:41 GMT
+Content-Length: 2
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:03:51 GMT
+Cache-Control: max-age=10
+
+Ok
+[crow@corvus ~]$ curl -i -X "POST" http://172.16.0.20/notes -H "Content-Type: application/json"  -d '{"Text":"Teste 3"}' && echo                                                                
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:03:45 GMT
+Content-Length: 2
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:03:55 GMT
+Cache-Control: max-age=10
+
+Ok
+
+#############################################################
+- Consulta das inserções:
+[crow@corvus ~]$ curl -i -X "GET" http://172.16.0.20/notes -H "Content-Type: application/json" && echo
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:05:56 GMT
+Content-Length: 232
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:06:06 GMT
+Cache-Control: max-age=10
+
+[{"Id":3,"Text":"`Text` = 'Teste 3'","CreateDate":"2018-09-24T08:03:45.000Z"},{"Id":2,"Text":"`Text` = 'Teste 2'","CreateDate":"2018-09-24T08:03:41.000Z"},{"Id":1,"Text":"`Text` = 'Teste 1'","CreateDate":"2018-09-24T08:03:34.000Z"}]
+
+#############################################################
+- Deleção da nota com ID 1. 
+[crow@corvus ~]$ curl -i  -H "Content-Type: application/json" -X "DELETE" http://172.16.0.20/notes/1 && echo 
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:06:10 GMT
+Content-Length: 2
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:06:20 GMT
+Cache-Control: max-age=10
+
+Ok
+
+#############################################################
+-- Consulta
+[crow@corvus ~]$ curl -i -X "GET" http://172.16.0.20/notes -H "Content-Type: application/json" && echo
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 24 Sep 2018 08:06:14 GMT
+Content-Length: 155
+Connection: keep-alive
+Expires: Mon, 24 Sep 2018 08:06:24 GMT
+Cache-Control: max-age=10
+
+[{"Id":3,"Text":"`Text` = 'Teste 3'","CreateDate":"2018-09-24T08:03:45.000Z"},{"Id":2,"Text":"`Text` = 'Teste 2'","CreateDate":"2018-09-24T08:03:41.000Z"}]
+
+- Com formatação de tabela
+[crow@corvus ~]$ curl -s -w "\n" -X "GET" http://172.16.0.20/notes -H "Content-Type: application/json"  | sed -e "s/},{/&\n/g" -e "s/{//g" -e "s/\[//g" -e "s/\]//g" -e "s/}//g"  | awk -F':|,|=' 'BEGIN { printf("%s %8s %8s \n","ID","Texto","Data")}{printf("%s %14s %8s \n" , $2,$5,$7)}' | sed -e "s/\"//g" 
+ID    Texto     Data 
+3     'Teste 3' 2018-09-24T08 
+2     'Teste 2' 2018-09-24T08 
+[crow@corvus ~]$ 
+#############################################################
