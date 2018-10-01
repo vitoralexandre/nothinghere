@@ -109,3 +109,100 @@ Adicionando o serviço no boot e reiniciando o mesmo para colocar as alteraçõe
 **2** Aceitando a chave:
 
 ```salt-kel -a CHAVEDOMINION``` 
+
+## Servidor NGinx com balanceamento de carga
+
+Entre no containter do SaltStack com: 
+
+```docker exec -it salt bash```
+
+- Criando o container do NGinx: 
+
+```salt huginemunin.dockerserver state.apply nginx-docker```
+
+- Algumas ações serão necessárias para que possamos integrar o SaltStack, vamos aos passos: 
+
+**1** ```salt huginemunin.dockerserver docker.run nginx 'yum update -y'```
+
+**2** ```salt huginemunin.dockerserver docker.run nginx 'yum install epel-release -y'```
+
+**3** ```salt huginemunin.dockerserver docker.run nginx 'yum install python2-pip.noarch -y'```
+
+**4** ```salt huginemunin.dockerserver docker.run nginx 'pip install --upgrade pip'```
+
+**5** ```salt huginemunin.dockerserver docker.run nginx 'pip install futures'```
+
+- Agora vamos instalar e configurar o NGinx de acordo com o state que criamos.
+
+```salt huginemunin.dockerserver dockerng.sls nginx saltenv='nginx' mods=nginx```
+
+- Vamos fazer o update do default.conf para responder às nossas espectativas com relação ao balanceamento de carga: 
+
+```salt huginemunin.dockerserver dockerng.sls nginx mods=nginx```
+
+- Uma informação importante é que, caso deseje criar uma novo container, é importante editar os seguintes arquivos:
+
+/srv/salt/arquivos/default.conf --> Adicionar os novos servidores e executar ``salt huginemunin.dockerserver dockerng.sls nginx saltenv='nginx' mods=nginx```
+
+## Servidor MySQL
+
+Ainda dentro do containter do SaltStack, salt, vamos executar os seguintes comandos: 
+
+- Criando o containers do MySQL: 
+```salt huginemunin.dockerserver state.apply mysql-docker```
+
+- Vamos proceder comas instalações para integração do SaltStack como fizemos no NGinx: 
+
+**1** ```salt huginemunin.dockerserver docker.run mysql 'yum update -y'```
+
+**2** ```salt huginemunin.dockerserver docker.run mysql 'yum install epel-release -y'```
+
+**3** ```salt huginemunin.dockerserver docker.run mysql 'yum install python2-pip.noarch -y'```
+
+**4** ```salt huginemunin.dockerserver docker.run mysql 'pip install --upgrade pip'```
+
+**5** ```salt huginemunin.dockerserver docker.run mysql 'pip install futures'`` 
+
+- Agora vamos instalar e configurar o MySQL (o Percona foi a escolha) de acordo com o state que criamos.
+
+```salt huginemunin.dockerserver dockerng.sls mysql saltenv='mysql' mods=mysql```
+
+- Proceda com a configuração do MySQL (mysql-sercure-installation): 
+
+```salt huginemunin.dockerserver docker.run mysql 'bash /root/configure_mysql.sh'```
+
+Ele fará toda a configuração e gerará uma senha para o usuário root. 
+
+Agora vamos a criação da base e do usuário para conexão da aplicação. 
+
+Entre no containter com ```docker exec -it mysql bash``` e execute:
+
+```
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "create database notes;"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "show databases;"
+Warning: Using a password on the command line interface can be insecure.
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| mysql              |
+| notes              |
+| performance_schema |
++--------------------+
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "create user 'notes-api'@'%' identified by 'yWRsbyr7MTMjdUhG';"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "grant all privileges on notes.* to 'notes-api'@'%'"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "flush privileges"
+Warning: Using a password on the command line interface can be insecure.
+[root@mysql /]# mysql -p$(cat /root/.mysqlpasswd) -e "show grants for 'notes-api'@'%'"
+Warning: Using a password on the command line interface can be insecure.
++----------------------------------------------------------------------------------------------------------+
+| Grants for notes-api@%                                                                                   |
++----------------------------------------------------------------------------------------------------------+
+| GRANT USAGE ON *.* TO 'notes-api'@'%' IDENTIFIED BY PASSWORD '*9761C8A40E3FF5D053CFE78872F884878D43DEED' |
+| GRANT ALL PRIVILEGES ON `notes`.* TO 'notes-api'@'%'                                                     |
++----------------------------------------------------------------------------------------------------------+
+[root@mysql /]# 
+```
