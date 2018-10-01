@@ -1,0 +1,136 @@
+interface: 0.0.0.0
+user: root
+pidfile: /var/run/salt-master.pid
+sock_dir: /var/run/salt/master
+log_file: /var/log/salt/master
+log_level_logfile: warning
+#log_level_logfile: info
+#log_level_logfile: debug
+
+conf_file: /etc/salt/master
+cachedir: /var/cache/salt/master
+job_cache: True
+minion_data_cache: False
+
+keep_jobs: 10
+timeout: 10
+loop_interval: 10
+show_timeout: True
+color: True
+
+#max_open_files: 100000
+worker_threads: 2
+
+open_mode: False
+auto_accept: True
+autosign_timeout: 120
+
+external_auth:
+  pam:
+    salt:
+      - .*
+      - '@runner'
+      - '@wheel'
+      - '@jobs'
+    root:
+      - .*
+
+file_roots:
+# Dados genéricos
+   base:
+     - /srv/salt/
+# Servidores gerenciados
+   infra: 
+     - /srv/gerenciados/ 
+   monitoria: 
+     - /srv/zabbix/
+# WebServers 
+   nginx: 
+     - /srv/nginx/
+   apache:
+     - /srv/apache/
+   tomcat:
+     - /srv/tomcat/
+   jboss:
+     - /srv/jboss/
+# Database servers
+   mysql:
+     - /srv/mysql/ 
+   postgresql: 
+     - /srv/postgresql/
+# FTP Servers 
+   ftp: 
+     - /srv/ftp/ 
+# Servidores Compartilhados
+   lhost: 
+     - /srv/lhost/
+   mysqlhost: 
+     - /srv/mysqlhost/ 
+# Servidores Windows
+   windows: 
+     - /srv/windows/
+# Servidores Zimbra
+   zimbra: 
+     - /srv/zimbra/ 
+# Servidores de email
+   mail: 
+     - /srv/mail
+# Servidores VMware
+   vmware: 
+     - /srv/vmware
+# Balancer 
+   balancer:
+     - /srv/balancer
+# Painel 
+   pdc:
+     - /srv/pdc
+
+pillar_roots: 
+   base:
+     - /srv/pillar
+#   apache:
+#     - /srv/pillar/apache/
+   
+#   dev:
+#     - /srv/salt/dev/services
+#     - /srv/salt/dev/states
+#   prod:
+#     - /srv/salt/prod/services
+#     - /srv/salt/prod/states
+#
+#file_roots:
+#  base:
+#    - /srv/salt
+#
+
+fileserver_backend:
+  - git
+  - roots
+
+pillar_cache_backend: disk
+
+#nodegroups:
+#  lhost: 'lhost*.infolink.com.br'
+#  mysqlhost: 'mysqlhost*.infolink.com.br'
+#  cloud: 'cloud*.hospedagem.w3br.com or vps*.hospedagem.w3br.com'
+
+winrepo_dir_ng: '/srv/salt/win/repo-ng'
+winrepo_remotes_ng:
+  - 'https://github.com/saltstack/salt-winrepo-ng.git'
+
+winrepo_dir: '/srv/salt/win/repo'
+winrepo_remotes:
+  - 'https://github.com/saltstack/salt-winrepo.git'
+
+salt-ssh:
+  config_dir: /etc/salt/ssh
+  ssh_max_procs: 30
+  ssh_wipe: True
+
+rest_cherrypy:
+  port: 8000
+  disable_ssl: True
+  host: 0.0.0.0
+#  app: /srv/SaltGUI/saltgui/index.html
+#  static: /srv/SaltGUI/saltgui/static
+#  static_path: /static
