@@ -208,7 +208,7 @@ Warning: Using a password on the command line interface can be insecure.
 ```
 
 ## Servidor NodeJS
-*.
+
 Agora, com o NGinx e o MySQL configurados, vamos ao servidor da aplicação. 
 
 - Criando o container do NodeJS: ```salt huginemunin.dockerserver state.apply node-docker```
