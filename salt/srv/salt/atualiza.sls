@@ -1,0 +1,2 @@
+atualiza: 
+  pkg.uptodate

@@ -1,0 +1,17 @@
+server {
+    listen 80 ;
+    server_name dominio.tld www.dominio.tld ; 
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+     }
+}
+
+upstream backend {
+    server 192.168.0.WWW ; 
+    server 192.168.0.XXX ; 
+    server 192.168.0.YYY ; 
+    server 192.168.0.ZZZ ;
+
+}
+

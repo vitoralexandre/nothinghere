@@ -1,0 +1,6 @@
+    ssl on;
+    ssl_certificate /etc/nginx/certificados/ssl.infolink.com.br.crt;
+    ssl_certificate_key /etc/nginx/certificados/ssl.infolink.com.br.key;
+
+    ssl_protocols       TLSv1 TLSv1.1 TLSv1.2;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
