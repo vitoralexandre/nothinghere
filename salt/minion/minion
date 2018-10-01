@@ -1,0 +1,13 @@
+sock_dir: /var/run/salt/minion
+acceptance_wait_time: 60
+recon_default: 10000
+user: root
+master: 172.16.0.29
+#mine_enabled: True
+loop_interval: 60
+
+#startup_states:
+
+log_level: debug
+#log_level: warning"
+id: huginemunin.dockerserver
