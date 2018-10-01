@@ -108,7 +108,7 @@ Adicionando o serviço no boot e reiniciando o mesmo para colocar as alteraçõe
 
 **2** Aceitando a chave:
 
-```salt-kel -a CHAVEDOMINION``` 
+```salt-key -a CHAVEDOMINION``` 
 
 ## Servidor NGinx com balanceamento de carga
 
@@ -148,7 +148,7 @@ Entre no containter do SaltStack com:
 
 Ainda dentro do containter do SaltStack, salt, vamos executar os seguintes comandos: 
 
-- Criando o containers do MySQL: 
+- Criando o container do MySQL: 
 ```salt huginemunin.dockerserver state.apply mysql-docker```
 
 - Vamos proceder comas instalações para integração do SaltStack como fizemos no NGinx: 
@@ -264,4 +264,5 @@ Também podemos atualizar os arquivos de código fonte facilmente com o seguinte
 
 Para isto, basta editar os arquivos que estão em /srv/salt/arquivos/PasseiDireto/CodFonte/ . 
 
- 
+
+Isto é tudo!
