@@ -244,7 +244,7 @@ O NGinx está ativo para fazer balanceamento de carga, portanto, caso deseje cri
 
 - ipv4_address: 172.16.0.23
 
-Estes campos sãp importantes para identificação no docker (name), identificação quando estiver conectado no container (hostname) e configuração do NGinx (ipv4_address). 
+Estes campos são importantes para identificação no docker (name), identificação quando estiver conectado no container (hostname) e configuração do NGinx (ipv4_address). 
 
 **2** Edite o arquivo /srv/salt/arquivos/default.conf adicionando a linha: 
 
@@ -263,6 +263,14 @@ Também podemos atualizar os arquivos de código fonte facilmente com o seguinte
 ```salt huginemunin.dockerserver dockerng.sls node mods=codupdate```
 
 Para isto, basta editar os arquivos que estão em /srv/salt/arquivos/PasseiDireto/CodFonte/ . 
+
+## IMPORTANTE 
+
+- 172.16.0.0/24 é uma rede privada, portanto, caso vá utilizar a rede macvlan, será necessário definir o IP do gateway e range de acordo com a rede interna que você possui. 
+
+- enp1s0 é a interface de rede do servidor Docker. Dependendo da distro, o nome pode variar para eth0, por exemplo. 
+
+
 
 
 Isto é tudo!
